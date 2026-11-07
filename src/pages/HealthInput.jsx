@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import styled from "styled-components";
 import {
@@ -11,7 +11,12 @@ import {
   Check,
 } from "lucide-react";
 
-import { child } from "../data/dummyHealth";
+import { getChild } from "../api/children";
+import {
+  getHealthRecords,
+  createHealthRecord,
+  updateHealthRecord,
+} from "../api/health";
 
 const symptomOptions = [
   "기침",
@@ -27,6 +32,12 @@ const symptomOptions = [
 function HealthInput() {
   const navigate = useNavigate();
 
+  const CHILD_ID = 1;
+
+  const [child, setChild] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
   const [temperatures, setTemperatures] = useState({
     morning: "",
     noon: "",
@@ -36,6 +47,36 @@ function HealthInput() {
   const [clinicalNote, setClinicalNote] = useState("");
   const [selectedSymptoms, setSelectedSymptoms] = useState([]);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+
+    const fetchChild = async () => {
+      try {
+        const data = await getChild(CHILD_ID);
+
+        if (active) {
+          setChild(data);
+        }
+      } catch (err) {
+        console.error("아동 정보 조회 오류:", err);
+
+        if (active) {
+          setError("아동 정보를 불러오지 못했습니다.");
+        }
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    };
+
+    fetchChild();
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const handleTemperatureChange = (field, value) => {
     setTemperatures((prev) => ({
@@ -52,47 +93,95 @@ function HealthInput() {
     );
   };
 
-  const handleSubmit = (e) => {
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (saving || !child) return;
+
     setError("");
 
     const values = Object.values(temperatures);
 
-    if (values.some((value) => value.trim() === "")) {
-      setError("오전, 점심, 오후 체온을 모두 입력해 주세요.");
-      return;
-    }
+    // 입력한 체온만 검사 (미입력 허용)
+    const invalidTemperature = values.some((value) => {
+      if (value.trim() === "") return false;
 
-    if (
-      values.some((value) => {
-        const number = Number(value);
-        return !Number.isFinite(number) || number < 34 || number > 42;
-      })
-    ) {
+      const number = Number(value);
+      return !Number.isFinite(number) || number < 34 || number > 42;
+    });
+
+    if (invalidTemperature) {
       setError("체온은 34℃ 이상 42℃ 이하로 입력해 주세요.");
       return;
     }
 
-    if (!clinicalNote.trim()) {
-      setError("건강 관찰 기록을 입력해 주세요.");
+    // 체온과 관찰 기록이 모두 비어 있는 경우만 차단
+    if (
+      values.every((value) => value.trim() === "") &&
+      !clinicalNote.trim()
+    ) {
+      setError("체온 또는 건강 관찰 기록을 입력해 주세요.");
       return;
     }
 
+    const today = new Date().toLocaleDateString("sv-SE");
+
+    const toTemperature = (value) =>
+      value.trim() === "" ? null : Number(value);
+
     const payload = {
-      child_id: child.id,
-      date: new Date().toLocaleDateString("sv-SE"),
-      morning_temp: Number(temperatures.morning),
-      noon_temp: Number(temperatures.noon),
-      afternoon_temp: Number(temperatures.afternoon),
+      date: today,
+      morning_temp: toTemperature(temperatures.morning),
+      noon_temp: toTemperature(temperatures.noon),
+      afternoon_temp: toTemperature(temperatures.afternoon),
       clinical_note: clinicalNote.trim(),
       selected_symptoms: selectedSymptoms,
     };
 
-    // TODO: FastAPI 연결 후 실제 저장 및 AI 분석 요청
-    console.log("건강 기록 입력 데이터:", payload);
+    setSaving(true);
 
-    navigate("/");
+    try {
+      const records = await getHealthRecords(CHILD_ID);
+
+      const existingRecord = records.find(
+        (record) => record.date === today
+      );
+
+      if (existingRecord) {
+        // 이미 오늘 기록이 있으면 수정
+        const { date, ...updatePayload } = payload;
+
+        await updateHealthRecord(
+          CHILD_ID,
+          existingRecord.id,
+          updatePayload
+        );
+
+        console.log("건강 기록 수정 완료");
+      } else {
+        // 오늘 기록이 없으면 새로 등록
+        await createHealthRecord(CHILD_ID, payload);
+
+        console.log("건강 기록 등록 완료");
+      }
+
+      navigate("/");
+    } catch (err) {
+      console.error("건강 기록 저장 오류:", err);
+
+      if (err.response?.status === 409) {
+        setError(
+          "오늘 날짜의 기록이 이미 등록되어 있습니다. 다시 시도해 주세요."
+        );
+      } else {
+        setError("건강 기록을 저장하지 못했습니다. 다시 시도해 주세요.");
+      }
+    } finally {
+      setSaving(false);
+    }
   };
+
 
   return (
     <Container>
@@ -114,9 +203,11 @@ function HealthInput() {
         </ChildIcon>
 
         <div>
-          <ChildName>{child.name}</ChildName>
+          <ChildName>{child?.name ?? "아동 정보 불러오는 중"}</ChildName>
           <ChildDetail>
-            {child.className} · 만 {child.age}세 · {child.gender}
+            {child
+              ? `${child.class_name} · 만 ${child.age}세 · ${child.gender}`
+              : "정보를 불러오는 중입니다."}
           </ChildDetail>
         </div>
       </ChildCard>
@@ -217,9 +308,12 @@ function HealthInput() {
 
         {error && <ErrorMessage role="alert">{error}</ErrorMessage>}
 
-        <SubmitButton type="submit">
+        <SubmitButton
+          type="submit"
+          disabled={saving || loading || !child}
+        >
           <Sparkles size={19} />
-          기록 확인 및 AI 분석하기
+          {saving ? "저장 중..." : "건강 기록 저장하기"}
         </SubmitButton>
       </Form>
     </Container>
@@ -428,7 +522,7 @@ const SymptomButton = styled.button`
   padding: 10px 15px;
   border: 1px solid
     ${({ theme, $selected }) =>
-      $selected ? theme.colors.primaryDark : theme.colors.border};
+    $selected ? theme.colors.primaryDark : theme.colors.border};
   border-radius: 20px;
   background: ${({ theme, $selected }) =>
     $selected ? theme.colors.primaryLight : theme.colors.surface};
