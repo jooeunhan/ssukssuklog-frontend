@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import styled from "styled-components";
 import { Link } from "react-router-dom";
 import {
@@ -25,8 +26,23 @@ import {
   healthRecords,
   aiAnalysis,
 } from "../data/dummyHealth";
+import api from "../api/client";
 
 function HealthDashboard() {
+  useEffect(() => {
+    const fetchDashboard = async () => {
+      try {
+        const response = await api.get("/children/1/dashboard");
+
+        console.log("대시보드 API 응답:", response.data);
+      } catch (error) {
+        console.error("대시보드 API 오류:", error);
+      }
+    };
+
+    fetchDashboard();
+  }, []);
+
   const latestTemperature =
     temperatureData[temperatureData.length - 1]?.temperature;
 
