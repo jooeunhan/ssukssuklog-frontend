@@ -46,23 +46,51 @@ function HealthInput() {
 
   const [clinicalNote, setClinicalNote] = useState("");
   const [selectedSymptoms, setSelectedSymptoms] = useState([]);
+  const [existingRecordId, setExistingRecordId] = useState(null);
+
   const [error, setError] = useState("");
+
 
   useEffect(() => {
     let active = true;
 
-    const fetchChild = async () => {
+    const fetchInitialData = async () => {
       try {
-        const data = await getChild(CHILD_ID);
+        const [childData, records] = await Promise.all([
+          getChild(CHILD_ID),
+          getHealthRecords(CHILD_ID),
+        ]);
 
-        if (active) {
-          setChild(data);
+        if (!active) return;
+
+        setChild(childData);
+
+        const today = new Date().toLocaleDateString("sv-SE");
+
+        const todayRecord = records.find(
+          (record) => record.date === today
+        );
+
+        if (todayRecord) {
+          setExistingRecordId(todayRecord.id);
+
+          setTemperatures({
+            morning: todayRecord.morning_temp?.toString() ?? "",
+            noon: todayRecord.noon_temp?.toString() ?? "",
+            afternoon: todayRecord.afternoon_temp?.toString() ?? "",
+          });
+
+          setClinicalNote(todayRecord.clinical_note ?? "");
+
+          setSelectedSymptoms(
+            todayRecord.selected_symptoms ?? []
+          );
         }
       } catch (err) {
-        console.error("아동 정보 조회 오류:", err);
+        console.error("초기 데이터 조회 오류:", err);
 
         if (active) {
-          setError("아동 정보를 불러오지 못했습니다.");
+          setError("건강 정보를 불러오지 못했습니다.");
         }
       } finally {
         if (active) {
@@ -71,12 +99,13 @@ function HealthInput() {
       }
     };
 
-    fetchChild();
+    fetchInitialData();
 
     return () => {
       active = false;
     };
   }, []);
+
 
   const handleTemperatureChange = (field, value) => {
     setTemperatures((prev) => ({
@@ -141,26 +170,21 @@ function HealthInput() {
 
     setSaving(true);
 
+
     try {
-      const records = await getHealthRecords(CHILD_ID);
-
-      const existingRecord = records.find(
-        (record) => record.date === today
-      );
-
-      if (existingRecord) {
-        // 이미 오늘 기록이 있으면 수정
+      if (existingRecordId !== null) {
+        // 기존 건강 기록 수정
         const { date, ...updatePayload } = payload;
 
         await updateHealthRecord(
           CHILD_ID,
-          existingRecord.id,
+          existingRecordId,
           updatePayload
         );
 
         console.log("건강 기록 수정 완료");
       } else {
-        // 오늘 기록이 없으면 새로 등록
+        // 새로운 건강 기록 등록
         await createHealthRecord(CHILD_ID, payload);
 
         console.log("건강 기록 등록 완료");
@@ -172,7 +196,7 @@ function HealthInput() {
 
       if (err.response?.status === 409) {
         setError(
-          "오늘 날짜의 기록이 이미 등록되어 있습니다. 다시 시도해 주세요."
+          "이미 오늘 날짜의 기록이 등록되어 있습니다. 페이지를 새로고침한 후 다시 시도해 주세요."
         );
       } else {
         setError("건강 기록을 저장하지 못했습니다. 다시 시도해 주세요.");
@@ -313,7 +337,11 @@ function HealthInput() {
           disabled={saving || loading || !child}
         >
           <Sparkles size={19} />
-          {saving ? "저장 중..." : "건강 기록 저장하기"}
+          {saving
+            ? "저장 중..."
+            : existingRecordId !== null
+              ? "건강 기록 수정하기"
+              : "건강 기록 저장하기"}
         </SubmitButton>
       </Form>
     </Container>
