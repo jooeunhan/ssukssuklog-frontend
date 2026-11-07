@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import styled from "styled-components";
 import { Link } from "react-router-dom";
 import {
@@ -20,31 +20,73 @@ import {
   Tooltip,
 } from "recharts";
 
-import {
-  child,
-  temperatureData,
-  healthRecords,
-  aiAnalysis,
-} from "../data/dummyHealth";
 import api from "../api/client";
 
 function HealthDashboard() {
+  const [dashboard, setDashboard] = useState(null);
+  const [healthRecords, setHealthRecords] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
   useEffect(() => {
+    let active = true;
+
     const fetchDashboard = async () => {
       try {
-        const response = await api.get("/children/1/dashboard");
+        const [dashboardResponse, recordsResponse] = await Promise.all([
+          api.get("/children/1/dashboard"),
+          api.get("/children/1/records"),
+        ]);
 
-        console.log("대시보드 API 응답:", response.data);
-      } catch (error) {
-        console.error("대시보드 API 오류:", error);
+        if (!active) return;
+
+        setDashboard(dashboardResponse.data);
+        setHealthRecords(recordsResponse.data);
+      } catch (err) {
+        if (!active) return;
+        console.error("대시보드 api 오류:", err);
+        setError("건강 정보를 불러오지 못했음.");
+      } finally {
+        if (active) setLoading(false);
       }
     };
 
     fetchDashboard();
+
+    return () => {
+      active = false;
+    };
   }, []);
 
-  const latestTemperature =
-    temperatureData[temperatureData.length - 1]?.temperature;
+  if (loading) {
+    return <Container>건강 정보를 불러오는 중...</Container>
+  }
+
+  if (error) {
+    return <Container>{error}</Container>;
+  }
+
+  const child = dashboard.child;
+  const latestRecord = dashboard.latest_record;
+
+  const temperatureData = (dashboard.temperature_history ?? [])
+    .slice(-7)
+    .map((record) => ({
+      date: record.date.slice(5),
+      morning: record.morning_temp,
+      noon: record.noon_temp,
+      afternoon: record.afternoon_temp,
+    }));
+
+  const latestTemperature = latestRecord
+    ? (
+      latestRecord.afternoon_temp ??
+      latestRecord.noon_temp ??
+      latestRecord.morning_temp
+    )
+    : null;
+
+  const latestSymptoms = latestRecord?.selected_symptoms ?? [];
 
   return (
     <Container>
@@ -70,9 +112,13 @@ function HealthDashboard() {
         <ProfileInfo>
           <ChildName>{child.name}</ChildName>
           <ChildDetail>
-            {child.className} · 만 {child.age}세 · {child.gender}
+            {child.class_name} · 만 {child.age}세 · {child.gender}
           </ChildDetail>
-          <ChildDetail>알레르기: {child.allergies.join(", ")}</ChildDetail>
+          <ChildDetail>
+            알레르기: {child.allergies?.length
+              ? child.allergies.join(", ")
+              : "없음"}
+          </ChildDetail>
         </ProfileInfo>
       </ProfileCard>
 
@@ -82,7 +128,11 @@ function HealthDashboard() {
             <Thermometer size={17} />
             최근 체온
           </SummaryLabel>
-          <SummaryValue>{latestTemperature}℃</SummaryValue>
+          <SummaryValue>
+            {latestTemperature !== null
+              ? `${latestTemperature.toFixed(1)}℃`
+              : "기록 없음"}
+          </SummaryValue>
         </SummaryCard>
 
         <SummaryCard $color="yellow">
@@ -90,7 +140,7 @@ function HealthDashboard() {
             <Activity size={17} />
             개인 기준 체온
           </SummaryLabel>
-          <SummaryValue>36.6℃</SummaryValue>
+          <SummaryValue>산출 중</SummaryValue>
         </SummaryCard>
 
         <SummaryCard $color="white">
@@ -112,18 +162,45 @@ function HealthDashboard() {
           <ChartArea>
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={temperatureData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#F0E4E5" />
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="#F0E4E5"
+                />
                 <XAxis dataKey="date" />
-                <YAxis domain={[36, 38]} />
+                <YAxis domain={[35.5, 39]} />
                 <Tooltip />
+
                 <Line
                   type="monotone"
-                  dataKey="temperature"
-                  stroke="#D9869D"
-                  strokeWidth={3}
-                  dot={{ r: 4 }}
-                  name="체온"
+                  dataKey="morning"
+                  stroke="#E6B65C"
+                  strokeWidth={2}
+                  dot={{ r: 3 }}
+                  name="오전"
                   unit="℃"
+                  connectNulls={false}
+                />
+
+                <Line
+                  type="monotone"
+                  dataKey="noon"
+                  stroke="#D9869D"
+                  strokeWidth={2}
+                  dot={{ r: 3 }}
+                  name="점심"
+                  unit="℃"
+                  connectNulls={false}
+                />
+
+                <Line
+                  type="monotone"
+                  dataKey="afternoon"
+                  stroke="#8EACD0"
+                  strokeWidth={2}
+                  dot={{ r: 3 }}
+                  name="오후"
+                  unit="℃"
+                  connectNulls={false}
                 />
               </LineChart>
             </ResponsiveContainer>
@@ -136,20 +213,35 @@ function HealthDashboard() {
             AI 건강 분석
           </SectionTitle>
 
-          <StatusBadge>{aiAnalysis.status}</StatusBadge>
+          <StatusBadge>
+            {dashboard.analysis_status === "pending"
+              ? "분석 대기"
+              : dashboard.analysis_status === "processing"
+                ? "분석 중"
+                : dashboard.analysis_status === "failed"
+                  ? "분석 실패"
+                  : "분석 완료"}
+          </StatusBadge>
 
           <AnalysisLabel>관찰된 증상</AnalysisLabel>
+
           <SymptomList>
-            {aiAnalysis.symptoms.map((symptom) => (
-              <SymptomTag key={symptom}>{symptom}</SymptomTag>
-            ))}
+            {latestSymptoms.length > 0 ? (
+              latestSymptoms.map((symptom) => (
+                <SymptomTag key={symptom}>
+                  {symptom}
+                </SymptomTag>
+              ))
+            ) : (
+              <span>기록된 증상 없음</span>
+            )}
           </SymptomList>
 
-          <AnalysisText>{aiAnalysis.summary}</AnalysisText>
+          <AnalysisText>모델 연결 후 건강 관찰 단계와 분석 결과 표시</AnalysisText>
 
           <Recommendation>
             <strong>관찰 제안</strong>
-            <p>{aiAnalysis.recommendation}</p>
+            <p>분석 기능 준비 중</p>
           </Recommendation>
         </AnalysisCard>
       </ContentGrid>
@@ -163,16 +255,29 @@ function HealthDashboard() {
         </SectionHeader>
 
         <RecordList>
-          {healthRecords.map((record) => (
-            <RecordItem key={record.id}>
-              <RecordInfo>
-                <RecordDate>{record.date}</RecordDate>
-                <RecordNote>{record.note}</RecordNote>
-              </RecordInfo>
+          {healthRecords.slice(0, 7).map((record) => {
+            const temperature =
+              record.afternoon_temp ??
+              record.noon_temp ??
+              record.morning_temp;
 
-              <RecordTemperature>{record.temperature}℃</RecordTemperature>
-            </RecordItem>
-          ))}
+            return (
+              <RecordItem key={record.id}>
+                <RecordInfo>
+                  <RecordDate>{record.date}</RecordDate>
+                  <RecordNote>
+                    {record.clinical_note || "특이사항 없음"}
+                  </RecordNote>
+                </RecordInfo>
+
+                <RecordTemperature>
+                  {temperature !== null
+                    ? `${temperature.toFixed(1)}℃`
+                    : "미측정"}
+                </RecordTemperature>
+              </RecordItem>
+            );
+          })}
         </RecordList>
       </SectionCard>
     </Container>
