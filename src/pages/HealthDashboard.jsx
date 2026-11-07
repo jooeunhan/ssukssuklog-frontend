@@ -20,7 +20,8 @@ import {
   Tooltip,
 } from "recharts";
 
-import api from "../api/client";
+import { getDashboard } from "../api/children";
+import { getHealthRecords } from "../api/health";
 
 function HealthDashboard() {
   const [dashboard, setDashboard] = useState(null);
@@ -33,15 +34,15 @@ function HealthDashboard() {
 
     const fetchDashboard = async () => {
       try {
-        const [dashboardResponse, recordsResponse] = await Promise.all([
-          api.get("/children/1/dashboard"),
-          api.get("/children/1/records"),
+        const [dashboardData, recordsData] = await Promise.all([
+          getDashboard(1),
+          getHealthRecords(1),
         ]);
 
         if (!active) return;
 
-        setDashboard(dashboardResponse.data);
-        setHealthRecords(recordsResponse.data);
+        setDashboard(dashboardData);
+        setHealthRecords(recordsData);
       } catch (err) {
         if (!active) return;
         console.error("대시보드 api 오류:", err);
