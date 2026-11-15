@@ -36,10 +36,14 @@ export const updateHealthRecord = async (
   return response.data;
 };
 
- // 개별 건강 기록 AI 분석
+// 개별 건강 기록 AI 분석
 export const analyzeHealthRecord = async (childId, recordId) => {
   const response = await api.post(
-    `/children/${childId}/records/${recordId}/analyze`
+    `/children/${childId}/records/${recordId}/analyze`,
+    null,
+    {
+      timeout: 120000,
+    }
   );
 
   return response.data;
