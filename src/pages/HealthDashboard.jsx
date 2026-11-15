@@ -69,6 +69,13 @@ function HealthDashboard() {
 
   const child = dashboard.child;
   const latestRecord = dashboard.latest_record;
+  const baseline = dashboard.baseline?.baseline;
+
+  const averageBaseline = baseline
+    ? (
+      (baseline.morning + baseline.noon + baseline.afternoon) / 3
+    ).toFixed(1)
+    : null;
 
   const temperatureData = (dashboard.temperature_history ?? [])
     .slice(-7)
@@ -88,6 +95,33 @@ function HealthDashboard() {
     : null;
 
   const latestSymptoms = latestRecord?.selected_symptoms ?? [];
+
+  const healthStatus = latestRecord?.health_status;
+
+  const aiAnalysis = latestRecord?.ai_analysis;
+
+  const analysisCompleted =
+    latestRecord?.analysis_status === "completed";
+
+  const healthStatusLabels = {
+    0: "일상 관찰",
+    1: "추가 관찰",
+    2: "우선 확인",
+  };
+
+  const healthStatusDescriptions = {
+    0: "현재 기록을 기준으로 일상적인 관찰을 이어갈 수 있어요.",
+    1: "평소와 다른 변화가 관찰되어 조금 더 세심한 확인이 필요해요.",
+    2: "관찰 기록에서 우선 확인이 필요한 변화가 나타났어요.",
+  };
+
+  const healthStatusLabel =
+    healthStatusLabels[healthStatus] ?? "분석 결과 없음";
+
+  const extractedSymptoms = Object.entries(
+    aiAnalysis?.symptom_scores ?? {}
+  );
+
 
   return (
     <Container>
@@ -141,8 +175,14 @@ function HealthDashboard() {
             <Activity size={17} />
             개인 기준 체온
           </SummaryLabel>
-          <SummaryValue>산출 중</SummaryValue>
+
+          <SummaryValue>
+            {averageBaseline !== null
+              ? `${averageBaseline}℃`
+              : "데이터 부족"}
+          </SummaryValue>
         </SummaryCard>
+
 
         <SummaryCard $color="white">
           <SummaryLabel>
@@ -208,6 +248,7 @@ function HealthDashboard() {
           </ChartArea>
         </SectionCard>
 
+
         <AnalysisCard>
           <SectionTitle>
             <BrainCircuit size={20} />
@@ -224,26 +265,60 @@ function HealthDashboard() {
                   : "분석 완료"}
           </StatusBadge>
 
-          <AnalysisLabel>관찰된 증상</AnalysisLabel>
+          {analysisCompleted && healthStatus !== null && healthStatus !== undefined ? (
+            <>
+              <HealthStatusBox $status={healthStatus}>
+                <HealthStatusTitle>
+                  {healthStatus}단계 · {healthStatusLabel}
+                </HealthStatusTitle>
 
-          <SymptomList>
-            {latestSymptoms.length > 0 ? (
-              latestSymptoms.map((symptom) => (
-                <SymptomTag key={symptom}>
-                  {symptom}
-                </SymptomTag>
-              ))
-            ) : (
-              <span>기록된 증상 없음</span>
-            )}
-          </SymptomList>
+                <HealthStatusDescription>
+                  {healthStatusDescriptions[healthStatus]}
+                </HealthStatusDescription>
+              </HealthStatusBox>
 
-          <AnalysisText>모델 연결 후 건강 관찰 단계와 분석 결과 표시</AnalysisText>
+              <AnalysisLabel>AI가 추출한 관찰 증상</AnalysisLabel>
 
-          <Recommendation>
-            <strong>관찰 제안</strong>
-            <p>분석 기능 준비 중</p>
-          </Recommendation>
+              <SymptomList>
+                {extractedSymptoms.length > 0 ? (
+                  extractedSymptoms.map(([symptom, score]) => (
+                    <SymptomTag key={symptom}>
+                      {symptom} · {score.toFixed(2)}
+                    </SymptomTag>
+                  ))
+                ) : (
+                  <span>추출된 증상 없음</span>
+                )}
+              </SymptomList>
+
+              <AnalysisLabel>교사가 선택한 증상</AnalysisLabel>
+
+              <SymptomList>
+                {latestSymptoms.length > 0 ? (
+                  latestSymptoms.map((symptom) => (
+                    <SymptomTag key={symptom}>
+                      {symptom}
+                    </SymptomTag>
+                  ))
+                ) : (
+                  <span>선택된 증상 없음</span>
+                )}
+              </SymptomList>
+
+              <Recommendation>
+                <strong>건강 관찰 안내</strong>
+                <p>
+                  {healthStatusDescriptions[healthStatus]}
+                </p>
+              </Recommendation>
+            </>
+          ) : (
+            <AnalysisText>
+              {dashboard.analysis_status === "failed"
+                ? "AI 분석에 실패했어요. 다시 분석해 주세요."
+                : "아직 AI 분석 결과가 없어요."}
+            </AnalysisText>
+          )}
         </AnalysisCard>
       </ContentGrid>
 
@@ -547,4 +622,29 @@ const RecordTemperature = styled.span`
   font-size: 15px;
   font-weight: 800;
   color: ${({ theme }) => theme.colors.primaryDark};
+`;
+
+const HealthStatusBox = styled.div`
+  margin-top: 18px;
+  padding: 18px;
+  border-radius: 14px;
+
+  background: ${({ $status }) =>
+    $status === 0
+      ? "#E8F5EC"
+      : $status === 1
+        ? "#FFF1D6"
+        : "#FCE3E7"};
+`;
+
+const HealthStatusTitle = styled.h4`
+  font-size: 18px;
+  font-weight: 800;
+`;
+
+const HealthStatusDescription = styled.p`
+  margin-top: 8px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: #555;
 `;
