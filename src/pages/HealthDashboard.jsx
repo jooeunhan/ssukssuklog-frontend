@@ -18,6 +18,7 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
+  ReferenceLine,
 } from "recharts";
 
 import { getDashboard } from "../api/children";
@@ -294,6 +295,20 @@ function HealthDashboard() {
                 <XAxis dataKey="date" />
                 <YAxis domain={[35.5, 39]} />
                 <Tooltip />
+                {averageBaseline != null && (
+                  <ReferenceLine
+                    y={Number(averageBaseline)}
+                    stroke="#A4C9B4"
+                    strokeWidth={2}
+                    strokeDasharray="5 5"
+                    label={{
+                      value: `개인 기준 ${Number(averageBaseline).toFixed(1)}℃`,
+                      position: "insideTopRight",
+                      fill: "#739B85",
+                      fontSize: 12,
+                    }}
+                  />
+                )}
 
                 <Line
                   type="monotone"
@@ -395,10 +410,28 @@ function HealthDashboard() {
                   {healthStatus}단계 · {healthStatusLabel}
                 </HealthStatusTitle>
 
+                <HealthStatusSteps>
+                  {["일상 관찰", "추가 관찰", "우선 확인"].map(
+                    (label, index) => (
+                      <HealthStatusStep
+                        key={index}
+                        $step={index}
+                        $active={Number(healthStatus) === index}
+                      >
+                        <StepCircle>
+                          {index}
+                        </StepCircle>
+                        <StepLabel>{label}</StepLabel>
+                      </HealthStatusStep>
+                    )
+                  )}
+                </HealthStatusSteps>
+
                 <HealthStatusDescription>
                   {healthStatusDescriptions[healthStatus]}
                 </HealthStatusDescription>
               </HealthStatusBox>
+
 
               <AnalysisLabel>AI가 추출한 관찰 증상</AnalysisLabel>
 
@@ -859,4 +892,59 @@ const LoadingMessage = styled.p`
   font-size: 13px;
   line-height: 1.7;
   color: #6B7280;
+`;
+
+
+const HealthStatusSteps = styled.div`
+  display: flex;
+  gap: 10px;
+  margin: 16px 0;
+`;
+
+const HealthStatusStep = styled.div`
+  flex: 1;
+  min-width: 0;
+  padding: 14px 8px;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+
+  border-radius: 12px;
+
+  background: ${({ $step }) =>
+    ["#e8f5ed", "#fff1d6", "#fce9e9"][$step]};
+
+  border: 2px solid
+    ${({ $active, $step }) =>
+    $active
+      ? ["#78bfa0", "#e8b45b", "#e58d8d"][$step]
+      : "transparent"};
+
+  opacity: ${({ $active }) => ($active ? 1 : 0.5)};
+`;
+
+const StepCircle = styled.div`
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  background: #ffffff;
+  color: #374151;
+
+  font-size: 14px;
+  font-weight: 700;
+`;
+
+const StepLabel = styled.span`
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  text-align: center;
 `;
