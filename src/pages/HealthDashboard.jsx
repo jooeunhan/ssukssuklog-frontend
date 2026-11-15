@@ -21,13 +21,15 @@ import {
 } from "recharts";
 
 import { getDashboard } from "../api/children";
-import { getHealthRecords } from "../api/health";
+import { getHealthRecords, analyzeHealthRecord } from "../api/health";
 
 function HealthDashboard() {
   const [dashboard, setDashboard] = useState(null);
   const [healthRecords, setHealthRecords] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analysisError, setAnalysisError] = useState(null);
 
   useEffect(() => {
     let active = true;
@@ -58,6 +60,51 @@ function HealthDashboard() {
       active = false;
     };
   }, []);
+
+  const handleAnalyze = async () => {
+    const record = dashboard?.latest_record;
+
+    if (!record || analyzing) return;
+
+    // 분석 필수 입력 확인
+    if (
+      record.morning_temp == null ||
+      record.noon_temp == null ||
+      record.afternoon_temp == null ||
+      !record.clinical_note?.trim()
+    ) {
+      setAnalysisError(
+        "체온 3회와 관찰 기록을 모두 입력해야 AI 분석을 진행할 수 있어요."
+      );
+      return;
+    }
+
+    setAnalyzing(true);
+    setAnalysisError(null);
+
+    try {
+      // Qwen → RF-D 분석 요청
+      await analyzeHealthRecord(1, record.id);
+
+      // 분석 완료 후 최신 데이터 다시 조회
+      const [dashboardData, recordsData] = await Promise.all([
+        getDashboard(1),
+        getHealthRecords(1),
+      ]);
+
+      setDashboard(dashboardData);
+      setHealthRecords(recordsData);
+    } catch (err) {
+      console.error("AI 분석 오류:", err);
+
+      setAnalysisError(
+        err.response?.data?.detail ||
+        "AI 분석 중 오류가 발생했어요. 다시 시도해 주세요."
+      );
+    } finally {
+      setAnalyzing(false);
+    }
+  };
 
   if (loading) {
     return <Container>건강 정보를 불러오는 중...</Container>
@@ -250,19 +297,42 @@ function HealthDashboard() {
 
 
         <AnalysisCard>
-          <SectionTitle>
-            <BrainCircuit size={20} />
-            AI 건강 분석
-          </SectionTitle>
+
+          <AnalysisHeader>
+            <SectionTitle>
+              <BrainCircuit size={20} />
+              AI 건강 분석
+            </SectionTitle>
+
+            <AnalyzeButton
+              type="button"
+              onClick={handleAnalyze}
+              disabled={
+                analyzing ||
+                !latestRecord ||
+                latestRecord.analysis_status === "processing"
+              }
+            >
+              {analyzing ? "분석 중..." : "분석하기"}
+            </AnalyzeButton>
+          </AnalysisHeader>
+
+          {analysisError && (
+            <AnalysisError>{analysisError}</AnalysisError>
+          )}
 
           <StatusBadge>
-            {dashboard.analysis_status === "pending"
-              ? "분석 대기"
-              : dashboard.analysis_status === "processing"
-                ? "분석 중"
-                : dashboard.analysis_status === "failed"
-                  ? "분석 실패"
-                  : "분석 완료"}
+            {analyzing
+              ? "분석 중"
+              : dashboard.analysis_status === "pending"
+                ? "분석 대기"
+                : dashboard.analysis_status === "processing"
+                  ? "분석 중"
+                  : dashboard.analysis_status === "failed"
+                    ? "분석 실패"
+                    : dashboard.analysis_status === "completed"
+                      ? "분석 완료"
+                      : "분석 대기"}
           </StatusBadge>
 
           {analysisCompleted && healthStatus !== null && healthStatus !== undefined ? (
@@ -647,4 +717,43 @@ const HealthStatusDescription = styled.p`
   font-size: 13px;
   line-height: 1.7;
   color: #555;
+`;
+
+
+const AnalysisHeader = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+`;
+
+const AnalyzeButton = styled.button`
+  padding: 10px 16px;
+  border: none;
+  border-radius: 12px;
+
+  background: ${({ theme }) => theme.colors.primary};
+  color: ${({ theme }) => theme.colors.text};
+
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    background: ${({ theme }) => theme.colors.primaryDark};
+    color: white;
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+`;
+
+const AnalysisError = styled.p`
+  margin-top: 12px;
+  color: #C94C64;
+  font-size: 13px;
+  line-height: 1.6;
 `;
