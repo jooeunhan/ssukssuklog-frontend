@@ -124,6 +124,18 @@ function HealthDashboard() {
     ).toFixed(1)
     : null;
 
+  const temperatureDeviation = dashboard.temperature_deviation;
+
+  const formatDeviation = (value) => {
+    if (value == null) return null;
+
+    const rounded = Number(value.toFixed(1));
+
+    if (rounded === 0) return "±0.0℃";
+
+    return `${rounded > 0 ? "+" : ""}${rounded.toFixed(1)}℃`;
+  };
+
   const temperatureData = (dashboard.temperature_history ?? [])
     .slice(-7)
     .map((record) => ({
@@ -217,6 +229,7 @@ function HealthDashboard() {
           </SummaryValue>
         </SummaryCard>
 
+
         <SummaryCard $color="yellow">
           <SummaryLabel>
             <Activity size={17} />
@@ -228,8 +241,32 @@ function HealthDashboard() {
               ? `${averageBaseline}℃`
               : "데이터 부족"}
           </SummaryValue>
-        </SummaryCard>
 
+          {temperatureDeviation && (
+            <DeviationList>
+              <DeviationItem>
+                <span>오전</span>
+                <strong>
+                  {formatDeviation(temperatureDeviation.morning) ?? "-"}
+                </strong>
+              </DeviationItem>
+
+              <DeviationItem>
+                <span>점심</span>
+                <strong>
+                  {formatDeviation(temperatureDeviation.noon) ?? "-"}
+                </strong>
+              </DeviationItem>
+
+              <DeviationItem>
+                <span>오후</span>
+                <strong>
+                  {formatDeviation(temperatureDeviation.afternoon) ?? "-"}
+                </strong>
+              </DeviationItem>
+            </DeviationList>
+          )}
+        </SummaryCard>
 
         <SummaryCard $color="white">
           <SummaryLabel>
@@ -756,4 +793,26 @@ const AnalysisError = styled.p`
   color: #C94C64;
   font-size: 13px;
   line-height: 1.6;
+`;
+
+const DeviationList = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 14px;
+`;
+
+const DeviationItem = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+
+  font-size: 12px;
+  color: #6B7280;
+
+  strong {
+    font-size: 13px;
+    font-weight: 700;
+    color: #374151;
+  }
 `;
