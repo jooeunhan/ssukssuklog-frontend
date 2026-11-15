@@ -35,3 +35,12 @@ export const updateHealthRecord = async (
   );
   return response.data;
 };
+
+ // 개별 건강 기록 AI 분석
+export const analyzeHealthRecord = async (childId, recordId) => {
+  const response = await api.post(
+    `/children/${childId}/records/${recordId}/analyze`
+  );
+
+  return response.data;
+};
