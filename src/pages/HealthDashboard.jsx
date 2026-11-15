@@ -341,6 +341,7 @@ function HealthDashboard() {
               AI 건강 분석
             </SectionTitle>
 
+
             <AnalyzeButton
               type="button"
               onClick={handleAnalyze}
@@ -350,8 +351,23 @@ function HealthDashboard() {
                 latestRecord.analysis_status === "processing"
               }
             >
-              {analyzing ? "분석 중..." : "분석하기"}
+              {analyzing ? (
+                <>
+                  <LoadingSpinner />
+                  분석 중...
+                </>
+              ) : (
+                "분석하기"
+              )}
             </AnalyzeButton>
+
+            {analyzing && (
+              <LoadingMessage role="status">
+                AI가 건강 관찰 기록을 분석하고 있어요.
+                첫 분석은 분석 시간이 조금 걸릴 수 있어요.
+              </LoadingMessage>
+            )}
+
           </AnalysisHeader>
 
           {analysisError && (
@@ -770,6 +786,11 @@ const AnalyzeButton = styled.button`
   border: none;
   border-radius: 12px;
 
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+
   background: ${({ theme }) => theme.colors.primary};
   color: ${({ theme }) => theme.colors.text};
 
@@ -815,4 +836,27 @@ const DeviationItem = styled.div`
     font-weight: 700;
     color: #374151;
   }
+`;
+
+const LoadingSpinner = styled.span`
+  width: 14px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+
+  animation: spin 0.8s linear infinite;
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+`;
+
+const LoadingMessage = styled.p`
+  margin-top: 12px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: #6B7280;
 `;
