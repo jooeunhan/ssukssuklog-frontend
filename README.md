@@ -17,6 +17,7 @@ ssukssuklog-frontend/
 │   │   ├── client.js
 │   │   ├── children.js
 │   │   └── health.js
+│   │   └── ai.js
 │   │
 │   ├── components/
 │   │   ├── common/     # 공통 컴포넌트
